@@ -1,0 +1,16 @@
+* [33m2f0424d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m Finalize credit scoring model and evaluation
+[31m|[m * [33mfdb00f4[m[33m ([m[1;31morigin/main[m[33m)[m Modify .gitignore for improved file exclusions
+[31m|[m * [33m600d2b1[m Add threshold_plot.py to visualize threshold metrics
+[31m|[m * [33mcec9226[m Add cross-validated threshold analysis script
+[31m|[m * [33m6533bc3[m Add threshold analysis for credit scoring model
+[31m|[m * [33mb288c56[m Add individual applicant prediction functionality
+[31m|[m * [33m8eaa5a2[m Add SHAP explainability analysis for credit scoring model
+[31m|[m * [33me1d00a9[m Add feature importance analysis script
+[31m|[m * [33m2864049[m Add error analysis script for credit scoring model
+[31m|[m[31m/[m  
+* [33m84a8a02[m Complete credit scoring machine learning pipeline
+* [33m929a485[m Create requirements.txt
+* [33m8414394[m Implement credit scoring model training and evaluation
+* [33mbab1073[m Add evaluation script for credit scoring model
+* [33m205ba24[m Add SHAP value calculation and plotting for model
+* [33m945e2cb[m Create explain.py
