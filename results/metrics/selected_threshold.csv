@@ -1,0 +1,2 @@
+selection_metric,selected_threshold,cv_accuracy_mean,cv_accuracy_std,cv_precision_mean,cv_precision_std,cv_recall_mean,cv_recall_std,cv_f1_mean,cv_f1_std
+mean_f1,0.4,0.7675,0.03137475099502786,0.6112740707568294,0.05827107399591028,0.625,0.09316949906249124,0.6155202877516249,0.06204290377909499
