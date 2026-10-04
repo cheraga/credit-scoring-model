@@ -1,120 +1,221 @@
 
-from pathlib import Path
-
-import joblib
-import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
+import joblib
 import shap
+import matplotlib.pyplot as plt
 
+BASE = "/content/credit-scoring-model"
 
-ROOT = Path(__file__).resolve().parents[1]
+# --------------------------------------------------
+# Load model
+# --------------------------------------------------
 
-MODEL_PATH = (
-    ROOT
-    / "models"
-    / "best_credit_scoring_model.joblib"
+model = joblib.load(
+    f"{BASE}/models/best_credit_scoring_model.joblib"
 )
 
-TEST_PATH = (
-    ROOT
-    / "data"
-    / "processed"
-    / "test_set.csv"
+print("Model loaded successfully.")
+
+# --------------------------------------------------
+# Load test data
+# --------------------------------------------------
+
+test_df = pd.read_csv(
+    f"{BASE}/data/processed/test_set.csv"
 )
 
-FIGURES_DIR = (
-    ROOT
-    / "results"
-    / "figures"
+X_test = test_df.drop(columns=["credit_risk"])
+y_test = test_df["credit_risk"]
+
+# --------------------------------------------------
+# Select applicant
+# --------------------------------------------------
+
+applicant_index = 0
+
+X_applicant = X_test.iloc[[applicant_index]]
+y_actual = y_test.iloc[applicant_index]
+
+# --------------------------------------------------
+# Extract pipeline components
+# --------------------------------------------------
+
+preprocessor = model.named_steps["preprocessor"]
+classifier = model.named_steps["classifier"]
+
+# --------------------------------------------------
+# Transform applicant
+# --------------------------------------------------
+
+X_transformed = preprocessor.transform(X_applicant)
+
+if hasattr(X_transformed, "toarray"):
+    X_transformed = X_transformed.toarray()
+
+feature_names = preprocessor.get_feature_names_out(
+    X_test.columns
 )
 
-FIGURES_DIR.mkdir(
-    parents=True,
-    exist_ok=True
+# --------------------------------------------------
+# SHAP Explainer
+# --------------------------------------------------
+
+explainer = shap.TreeExplainer(classifier)
+
+shap_values = explainer.shap_values(
+    X_transformed
 )
 
+if isinstance(shap_values, list):
+    shap_values = shap_values[1]
 
-def main():
+shap_values = np.asarray(shap_values)
 
-    print("Loading trained model...")
+if shap_values.ndim == 1:
+    applicant_shap = shap_values
+else:
+    applicant_shap = shap_values[0]
 
-    model = joblib.load(
-        MODEL_PATH
-    )
+# --------------------------------------------------
+# Prediction
+# --------------------------------------------------
 
-    test = pd.read_csv(
-        TEST_PATH
-    )
+prediction = model.predict(X_applicant)[0]
 
-    X_test = test.drop(
-        columns=["credit_risk"]
-    )
+probabilities = model.predict_proba(X_applicant)[0]
 
-    preprocessor = (
-        model.named_steps["preprocessor"]
-    )
+good_probability = probabilities[0]
+bad_probability = probabilities[1]
 
-    classifier = (
-        model.named_steps["classifier"]
-    )
+# --------------------------------------------------
+# Display prediction
+# --------------------------------------------------
 
-    X_transformed = (
-        preprocessor.transform(X_test)
-    )
+print("=" * 70)
+print("INDIVIDUAL CREDIT RISK EXPLANATION")
+print("=" * 70)
 
-    feature_names = (
-        preprocessor
-        .get_feature_names_out()
-    )
+print(f"\nApplicant index: {applicant_index}")
 
-    print("Calculating SHAP values...")
+print(
+    "\nActual class:",
+    "Good Credit" if y_actual == 0 else "Bad Credit"
+)
 
-    explainer = shap.TreeExplainer(
-        classifier
-    )
+print(
+    "Predicted class:",
+    "Good Credit" if prediction == 0 else "Bad Credit"
+)
 
-    shap_values = explainer.shap_values(
-        X_transformed
-    )
+print(f"\nGood Credit probability: {good_probability:.2%}")
+print(f"Bad Credit probability:  {bad_probability:.2%}")
 
-    if isinstance(
-        shap_values,
-        list
-    ):
-        values = shap_values[1]
-    else:
-        values = shap_values
+# --------------------------------------------------
+# SHAP contributions
+# --------------------------------------------------
 
-    plt.figure()
+explanation_df = pd.DataFrame({
+    "feature": feature_names,
+    "shap_value": applicant_shap
+})
 
-    shap.summary_plot(
-        values,
-        X_transformed,
-        feature_names=feature_names,
-        show=False,
-        max_display=20,
-    )
+explanation_df["abs_shap"] = (
+    explanation_df["shap_value"].abs()
+)
 
-    plt.tight_layout()
+explanation_df = explanation_df.sort_values(
+    "abs_shap",
+    ascending=False
+)
 
-    output_path = (
-        FIGURES_DIR
-        / "shap_summary.png"
-    )
+print("\nTop factors affecting this applicant:")
+print(
+    explanation_df.head(15)[
+        ["feature", "shap_value"]
+    ].to_string(index=False)
+)
 
-    plt.savefig(
-        output_path,
-        dpi=300,
-        bbox_inches="tight"
-    )
+# --------------------------------------------------
+# Separate positive / negative contributions
+# --------------------------------------------------
 
-    plt.close()
+positive = explanation_df[
+    explanation_df["shap_value"] > 0
+].head(10)
 
-    print(
-        f"SHAP figure saved to: "
-        f"{output_path}"
-    )
+negative = explanation_df[
+    explanation_df["shap_value"] < 0
+].head(10)
 
+print("\nFactors with POSITIVE SHAP contribution:")
+print(
+    positive[
+        ["feature", "shap_value"]
+    ].to_string(index=False)
+)
 
-if __name__ == "__main__":
-    main()
+print("\nFactors with NEGATIVE SHAP contribution:")
+print(
+    negative[
+        ["feature", "shap_value"]
+    ].to_string(index=False)
+)
+
+# --------------------------------------------------
+# Save explanation
+# --------------------------------------------------
+
+explanation_df[
+    ["feature", "shap_value"]
+].to_csv(
+    f"{BASE}/results/metrics/applicant_0_shap.csv",
+    index=False
+)
+
+# --------------------------------------------------
+# SHAP Waterfall Plot
+# --------------------------------------------------
+
+# Create Explanation object
+base_value = explainer.expected_value
+
+if isinstance(base_value, np.ndarray):
+    base_value = base_value[0]
+
+shap_explanation = shap.Explanation(
+    values=applicant_shap,
+    base_values=base_value,
+    data=X_transformed[0],
+    feature_names=feature_names
+)
+
+plt.figure()
+
+shap.plots.waterfall(
+    shap_explanation,
+    max_display=15,
+    show=False
+)
+
+plt.tight_layout()
+
+plt.savefig(
+    f"{BASE}/results/figures/applicant_0_shap_waterfall.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.close()
+
+print(
+    "\nSaved:"
+    f" {BASE}/results/metrics/applicant_0_shap.csv"
+)
+
+print(
+    "Saved:"
+    f" {BASE}/results/figures/applicant_0_shap_waterfall.png"
+)
+
+print("\nIndividual SHAP explanation completed successfully.")
